@@ -20,7 +20,7 @@ fn convertToSvgSafe(tvg_len: usize) !void {
 
     getSourceTvg(src_buffer.ptr, tvg_len);
 
-    var destination = std.ArrayList(u8).init(allocator);
+    var destination = std.array_list.Managed(u8).init(allocator);
     defer destination.deinit();
 
     try tvg.svg.renderBinary(allocator, src_buffer[0..tvg_len], destination.writer());

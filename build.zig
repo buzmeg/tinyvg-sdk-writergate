@@ -7,7 +7,7 @@ fn initNativeLibrary(lib: *std.Build.Step.Compile, tvg: *std.Build.Module) void 
 }
 
 pub fn build(b: *std.Build) !void {
-    const ptk_dep = b.dependency("ptk", .{});
+    const ptk_dep = b.dependency("parser_toolkit", .{});
     const ptk = ptk_dep.module("parser-toolkit");
 
     // TinyVG package
@@ -28,11 +28,22 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const static_native_lib = b.addStaticLibrary(.{
-        .name = "tinyvg",
+    // const static_native_lib = b.addStaticLibrary(.{
+    //     .name = "tinyvg",
+    //     .root_source_file = b.path("src/binding/binding.zig"),
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+    const lib_root_module = b.createModule(.{
         .root_source_file = b.path("src/binding/binding.zig"),
         .target = target,
         .optimize = optimize,
+    });
+
+    const static_native_lib = b.addLibrary(.{
+        .name = "tinyvg",
+        .linkage = .static,
+        .root_module = lib_root_module,
     });
     initNativeLibrary(static_native_lib, tvg);
     if (install_lib) {
@@ -44,11 +55,10 @@ pub fn build(b: *std.Build) !void {
     else
         "tinyvg";
 
-    const dynamic_native_lib = b.addSharedLibrary(.{
+    const dynamic_native_lib = b.addLibrary(.{
         .name = dynamic_lib_name,
-        .root_source_file = b.path("src/binding/binding.zig"),
-        .target = target,
-        .optimize = optimize,
+        .linkage = .dynamic,
+        .root_module = lib_root_module,
     });
     initNativeLibrary(dynamic_native_lib, tvg);
     if (install_lib) {
@@ -62,9 +72,11 @@ pub fn build(b: *std.Build) !void {
 
     const render = b.addExecutable(.{
         .name = "tvg-render",
-        .root_source_file = b.path("src/tools/render.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tools/render.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     render.root_module.addImport("tvg", tvg);
     render.root_module.addImport("args", args);
@@ -74,9 +86,11 @@ pub fn build(b: *std.Build) !void {
 
     const text = b.addExecutable(.{
         .name = "tvg-text",
-        .root_source_file = b.path("src/tools/text.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tools/text.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     text.root_module.addImport("tvg", tvg);
     text.root_module.addImport("args", args);
@@ -87,9 +101,11 @@ pub fn build(b: *std.Build) !void {
 
     const ground_truth_generator = b.addExecutable(.{
         .name = "ground-truth-generator",
-        .root_source_file = b.path("src/lib/ground-truth.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/lib/ground-truth.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     for (tvg.import_table.keys(), tvg.import_table.values()) |name, mod| {
         ground_truth_generator.root_module.addImport(name, mod);
@@ -127,8 +143,11 @@ pub fn build(b: *std.Build) !void {
 
     {
         const tvg_tests = b.addTest(.{
-            .root_source_file = tvg.root_source_file.?,
-            .optimize = optimize,
+            .root_module = b.createModule(.{
+                .root_source_file = tvg.root_source_file.?,
+                .target = target,
+                .optimize = optimize,
+            }),
         });
         for (tvg.import_table.keys(), tvg.import_table.values()) |name, mod| {
             tvg_tests.root_module.addImport(name, mod);
@@ -136,8 +155,10 @@ pub fn build(b: *std.Build) !void {
 
         const static_binding_test = b.addExecutable(.{
             .name = "static-native-binding",
-            .target = target,
-            .optimize = optimize,
+            .root_module = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+            }),
         });
         static_binding_test.linkLibC();
         static_binding_test.addIncludePath(b.path("src/binding/include"));
@@ -149,8 +170,10 @@ pub fn build(b: *std.Build) !void {
 
         const dynamic_binding_test = b.addExecutable(.{
             .name = "dynamic-native-binding",
-            .optimize = optimize,
-            .target = target,
+            .root_module = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+            }),
         });
         dynamic_binding_test.linkLibC();
         dynamic_binding_test.addIncludePath(b.path("src/binding/include"));
@@ -171,13 +194,15 @@ pub fn build(b: *std.Build) !void {
 
     const polyfill = b.addExecutable(.{
         .name = "tinyvg",
-        .root_source_file = b.path("src/polyfill/tinyvg.zig"),
-        .target = b.resolveTargetQuery(.{
-            .cpu_arch = .wasm32,
-            .cpu_model = .baseline,
-            .os_tag = .freestanding,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/polyfill/tinyvg.zig"),
+            .target = b.resolveTargetQuery(.{
+                .cpu_arch = .wasm32,
+                .cpu_model = .baseline,
+                .os_tag = .freestanding,
+            }),
+            .optimize = optimize,
         }),
-        .optimize = optimize,
     });
     polyfill.entry = .disabled;
     polyfill.root_module.export_symbol_names = &.{"convertToSvg"};

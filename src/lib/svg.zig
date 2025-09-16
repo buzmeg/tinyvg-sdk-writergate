@@ -26,7 +26,7 @@ pub fn renderBinary(allocator: std.mem.Allocator, tvg_buffer: []const u8, writer
 pub fn renderStream(allocator: std.mem.Allocator, parser: anytype, writer: anytype) !void {
     var cache = SvgStyleCache{
         .color_table = parser.color_table,
-        .list = std.ArrayList(tvg.Style).init(allocator),
+        .list = std.array_list.Managed(tvg.Style).init(allocator),
     };
     defer cache.list.deinit();
 
@@ -42,7 +42,7 @@ pub fn renderStream(allocator: std.mem.Allocator, parser: anytype, writer: anyty
             .fill_rectangles => |data| {
                 for (data.rectangles) |rect| {
                     try writer.print(
-                        \\<rect style="{}" x="{d}" y="{d}" width="{d}" height="{d}"/>
+                        \\<rect style="{f}" x="{d}" y="{d}" width="{d}" height="{d}"/>
                     ,
                         .{
                             svgStyle(&cache, data.style, null, null),
@@ -58,7 +58,7 @@ pub fn renderStream(allocator: std.mem.Allocator, parser: anytype, writer: anyty
             .outline_fill_rectangles => |data| {
                 for (data.rectangles) |rect| {
                     try writer.print(
-                        \\<rect style="{}" x="{d}" y="{d}" width="{d}" height="{d}"/>
+                        \\<rect style="{f}" x="{d}" y="{d}" width="{d}" height="{d}"/>
                     ,
                         .{
                             svgStyle(&cache, data.fill_style, data.line_style, data.line_width),
@@ -74,7 +74,7 @@ pub fn renderStream(allocator: std.mem.Allocator, parser: anytype, writer: anyty
             .draw_lines => |data| {
                 for (data.lines) |line| {
                     try writer.print(
-                        \\<line style="{}" x1="{d}" y1="{d}" x2="{d}" y2="{d}"/>
+                        \\<line style="{f}" x1="{d}" y1="{d}" x2="{d}" y2="{d}"/>
                     ,
                         .{
                             svgStyle(&cache, null, data.style, data.line_width),
@@ -89,7 +89,7 @@ pub fn renderStream(allocator: std.mem.Allocator, parser: anytype, writer: anyty
 
             .draw_line_loop => |data| {
                 try writer.print(
-                    \\<polygon style="{}" points="
+                    \\<polygon style="{f}" points="
                 , .{
                     svgStyle(&cache, null, data.style, data.line_width),
                 });
@@ -104,7 +104,7 @@ pub fn renderStream(allocator: std.mem.Allocator, parser: anytype, writer: anyty
 
             .draw_line_strip => |data| {
                 try writer.print(
-                    \\<polyline style="{}" points="
+                    \\<polyline style="{f}" points="
                 , .{
                     svgStyle(&cache, null, data.style, data.line_width),
                 });
@@ -119,7 +119,7 @@ pub fn renderStream(allocator: std.mem.Allocator, parser: anytype, writer: anyty
 
             .fill_polygon => |data| {
                 try writer.print(
-                    \\<polygon style="{}" points="
+                    \\<polygon style="{f}" points="
                 , .{
                     svgStyle(&cache, data.style, null, null),
                 });
@@ -134,7 +134,7 @@ pub fn renderStream(allocator: std.mem.Allocator, parser: anytype, writer: anyty
 
             .outline_fill_polygon => |data| {
                 try writer.print(
-                    \\<polygon style="{}" points="
+                    \\<polygon style="{f}" points="
                 , .{
                     svgStyle(&cache, data.fill_style, data.line_style, data.line_width),
                 });
@@ -151,7 +151,7 @@ pub fn renderStream(allocator: std.mem.Allocator, parser: anytype, writer: anyty
                 const style = svgStyle(&cache, null, data.style, data.line_width);
                 const path = SvgPath{ .path = data.path };
                 try writer.print(
-                    \\<path style="{}" d="{}"/>
+                    \\<path style="{f}" d="{f}"/>
                 , .{ style, path });
             },
 
@@ -159,7 +159,7 @@ pub fn renderStream(allocator: std.mem.Allocator, parser: anytype, writer: anyty
                 const style = svgStyle(&cache, data.style, null, null);
                 const path = SvgPath{ .path = data.path };
                 try writer.print(
-                    \\<path style="{}" d="{}"/>
+                    \\<path style="{f}" d="{f}"/>
                 , .{ style, path });
             },
 
@@ -168,7 +168,7 @@ pub fn renderStream(allocator: std.mem.Allocator, parser: anytype, writer: anyty
                 const path = SvgPath{ .path = data.path };
 
                 try writer.print(
-                    \\<path style="{}" d="{}"/>
+                    \\<path style="{f}" d="{f}"/>
                 , .{ style, path });
             },
         }
@@ -226,9 +226,7 @@ const SvgStyle = struct {
     line_style: ?tvg.Style,
     line_width: ?f32,
 
-    pub fn format(self: SvgStyle, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-        _ = fmt;
-        _ = options;
+    pub fn format(self: SvgStyle, writer: *std.io.Writer) std.io.Writer.Error!void {
         if (self.fill_style) |style| {
             switch (style) {
                 .flat => |ind| try self.cache.printColorForStyle(writer, "fill", ind),
@@ -261,10 +259,7 @@ const SvgStyle = struct {
 const SvgPath = struct {
     path: tvg.Path,
 
-    pub fn format(self: SvgPath, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-        _ = fmt;
-        _ = options;
-
+    pub fn format(self: SvgPath, writer: *std.io.Writer) std.io.Writer.Error!void {
         for (self.path.segments) |segment| {
             try writer.print("M{d},{d}", .{ segment.start.x, segment.start.y });
             for (segment.commands) |cmd| {
@@ -315,7 +310,7 @@ fn svgStyle(
 
 const SvgStyleCache = struct {
     color_table: []const tvg.Color,
-    list: std.ArrayList(tvg.Style),
+    list: std.array_list.Managed(tvg.Style),
 
     pub fn insert(self: *SvgStyleCache, style: tvg.Style) usize {
         self.list.append(style) catch @panic("out of memory");
