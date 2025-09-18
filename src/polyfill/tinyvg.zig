@@ -20,12 +20,16 @@ fn convertToSvgSafe(tvg_len: usize) !void {
 
     getSourceTvg(src_buffer.ptr, tvg_len);
 
-    var destination = std.array_list.Managed(u8).init(allocator);
-    defer destination.deinit();
+    var writer: std.Io.Writer.Allocating = .init(allocator);
+    defer writer.deinit();
 
-    try tvg.svg.renderBinary(allocator, src_buffer[0..tvg_len], destination.writer());
+    try tvg.svg.renderBinary(&writer.writer, allocator, src_buffer[0..tvg_len], );
 
-    setResultSvg(destination.items.ptr, destination.items.len);
+    try writer.writer.flush();
+
+    const destination = try writer.toOwnedSlice();
+
+    setResultSvg(destination.ptr, destination.len);
 }
 
 export fn convertToSvg(tvg_len: usize) u32 {
@@ -36,6 +40,8 @@ export fn convertToSvg(tvg_len: usize) u32 {
             error.InvalidData => 3,
             error.UnsupportedVersion => 4,
             error.UnsupportedColorFormat => 5,
+
+            error.WriteFailed => 6,
         };
     };
     return 0;

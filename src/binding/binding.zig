@@ -5,11 +5,42 @@ const c = @cImport({
     @cInclude("tinyvg.h");
 });
 
-fn renderSvg(data: []const u8, stream: CWriter) !void {
+
+pub const CWrappedWriter = struct {
+    cstream: *const c.tinyvg_OutStream = undefined,
+    interface: std.Io.Writer,
+
+    pub fn init(cstream: *const c.tinyvg_OutStream, buffer: []u8) CWrappedWriter {
+        return .{
+            .cstream = cstream,
+            .interface = initInterface(buffer),
+        };
+    }
+
+    pub fn initInterface(buffer: []u8) std.Io.Writer {
+        return .{
+            .vtable = &.{
+                .drain = std.Io.Writer.Discarding.drain,
+            },
+            .buffer = buffer,
+        };
+    }
+
+
+};
+
+
+fn renderSvg(data: []const u8, cstream: *const c.tinyvg_OutStream) !void {
     var temp_mem = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer temp_mem.deinit();
 
-    try tvg.svg.renderBinary(temp_mem.allocator(), data, stream);
+    var buffer: [1024]u8 = undefined;
+    var writer = CWrappedWriter.init(cstream, &buffer);
+    const writer_ptr = &writer.interface;
+
+    try tvg.svg.renderBinary(writer_ptr, temp_mem.allocator(), data);
+
+    try writer_ptr.flush();
 }
 
 fn renderBitmap(data: []const u8, src_anti_alias: c.tinyvg_AntiAlias, width: u32, height: u32, bitmap: *c.tinyvg_Bitmap) !void {
@@ -52,7 +83,7 @@ export fn tinyvg_render_svg(
 ) c.tinyvg_Error {
     renderSvg(
         tvg_data_ptr[0..tvg_length],
-        CWriter{ .context = target },
+        target,
     ) catch |err| return errToC(err);
     return c.TINYVG_SUCCESS;
 }
@@ -88,6 +119,7 @@ const CError = error{
     UnsupportedColorFormat,
     UnsupportedVersion,
     Unsupported,
+    WriteFailed,
 };
 
 fn errToZig(err: c.tinyvg_Error) CError!void {
@@ -110,10 +142,9 @@ fn errToC(err: CError) c.tinyvg_Error {
         error.UnsupportedColorFormat => c.TINYVG_ERR_UNSUPPORTED,
         error.UnsupportedVersion => c.TINYVG_ERR_UNSUPPORTED,
         error.Unsupported => c.TINYVG_ERR_UNSUPPORTED,
+        error.WriteFailed => c.TINYVG_ERR_IO,
     };
 }
-
-const CWriter = std.io.Writer(*const c.tinyvg_OutStream, CError, writeCStream);
 
 fn writeCStream(stream: *const c.tinyvg_OutStream, data: []const u8) CError!usize {
     var written: usize = 0;

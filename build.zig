@@ -84,20 +84,20 @@ pub fn build(b: *std.Build) !void {
         b.installArtifact(render);
     }
 
-    const text = b.addExecutable(.{
-        .name = "tvg-text",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/tools/text.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-    text.root_module.addImport("tvg", tvg);
-    text.root_module.addImport("args", args);
-    text.root_module.addImport("ptk", ptk);
-    if (install_bin) {
-        b.installArtifact(text);
-    }
+    // const text = b.addExecutable(.{
+    //     .name = "tvg-text",
+    //     .root_module = b.createModule(.{
+    //         .root_source_file = b.path("src/tools/text.zig"),
+    //         .target = target,
+    //         .optimize = optimize,
+    //     }),
+    // });
+    // text.root_module.addImport("tvg", tvg);
+    // text.root_module.addImport("args", args);
+    // text.root_module.addImport("ptk", ptk);
+    // if (install_bin) {
+    //     b.installArtifact(text);
+    // }
 
     const ground_truth_generator = b.addExecutable(.{
         .name = "ground-truth-generator",
@@ -114,32 +114,32 @@ pub fn build(b: *std.Build) !void {
     const generate_ground_truth = b.addRunArtifact(ground_truth_generator);
     generate_ground_truth.cwd = .{ .cwd_relative = b.cache_root.path.? };
 
-    const gen_gt_step = b.step("generate", "Regenerates the ground truth data.");
+    // const gen_gt_step = b.step("generate", "Regenerates the ground truth data.");
 
-    const files = [_][]const u8{
-        "shield-16.tvg",  "shield-8.tvg",      "shield-32.tvg",
-        "everything.tvg", "everything-32.tvg",
-    };
-    inline for (files) |file| {
-        const tvg_conversion = b.addRunArtifact(render);
-        tvg_conversion.addArg(file);
-        tvg_conversion.addArg("--super-sampling");
-        tvg_conversion.addArg("2");
-        tvg_conversion.addArg("--output");
-        tvg_conversion.addArg(file[0 .. file.len - 3] ++ "tga");
-        tvg_conversion.cwd = .{ .cwd_relative = b.cache_root.path.? };
-        tvg_conversion.step.dependOn(&generate_ground_truth.step);
+    // const files = [_][]const u8{
+    //     "shield-16.tvg",  "shield-8.tvg",      "shield-32.tvg",
+    //     "everything.tvg", "everything-32.tvg",
+    // };
+    // inline for (files) |file| {
+    //     const tvg_conversion = b.addRunArtifact(render);
+    //     tvg_conversion.addArg(file);
+    //     tvg_conversion.addArg("--super-sampling");
+    //     tvg_conversion.addArg("2");
+    //     tvg_conversion.addArg("--output");
+    //     tvg_conversion.addArg(file[0 .. file.len - 3] ++ "tga");
+    //     tvg_conversion.cwd = .{ .cwd_relative = b.cache_root.path.? };
+    //     tvg_conversion.step.dependOn(&generate_ground_truth.step);
 
-        const tvgt_conversion = b.addRunArtifact(text);
-        tvgt_conversion.addArg(file);
-        tvgt_conversion.addArg("--output");
-        tvgt_conversion.addArg(file[0 .. file.len - 3] ++ "tvgt");
-        tvgt_conversion.cwd = .{ .cwd_relative = b.cache_root.path.? };
-        tvgt_conversion.step.dependOn(&generate_ground_truth.step);
+    //     // const tvgt_conversion = b.addRunArtifact(text);
+    //     // tvgt_conversion.addArg(file);
+    //     // tvgt_conversion.addArg("--output");
+    //     // tvgt_conversion.addArg(file[0 .. file.len - 3] ++ "tvgt");
+    //     // tvgt_conversion.cwd = .{ .cwd_relative = b.cache_root.path.? };
+    //     // tvgt_conversion.step.dependOn(&generate_ground_truth.step);
 
-        gen_gt_step.dependOn(&tvgt_conversion.step);
-        gen_gt_step.dependOn(&tvg_conversion.step);
-    }
+    //     // gen_gt_step.dependOn(&tvgt_conversion.step);
+    //     gen_gt_step.dependOn(&tvg_conversion.step);
+    // }
 
     {
         const tvg_tests = b.addTest(.{
@@ -178,6 +178,7 @@ pub fn build(b: *std.Build) !void {
         dynamic_binding_test.linkLibC();
         dynamic_binding_test.addIncludePath(b.path("src/binding/include"));
         dynamic_binding_test.addCSourceFile(.{ .file = b.path("examples/usage.c"), .flags = &[_][]const u8{ "-Wall", "-Wextra", "-pedantic", "-std=c99" } });
+        dynamic_binding_test.addLibraryPath(b.path("zig-out/lib"));  // FIXME: This was required on Fedora--we need a better way to deal with this
         dynamic_binding_test.linkLibrary(dynamic_native_lib);
 
         const static_binding_test_run = b.addRunArtifact(static_binding_test);
